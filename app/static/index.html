@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cacao Disease Detector</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brand-mark">C</div>
+          <span>CacaoCare AI</span>
+        </div>
+        <div class="status-pill">Live disease screening</div>
+      </header>
+
+      <main class="hero">
+        <section class="intro">
+          <span class="eyebrow">Plant health intelligence</span>
+          <h1>Detect cacao crop diseases in seconds.</h1>
+          <p>
+            Upload a cacao pod image to receive a disease diagnosis, confidence score,
+            and class breakdown powered by an AI model.
+          </p>
+
+          <form id="predict-form" class="upload-card">
+            <label for="fileInput" class="upload-box" id="upload-box">
+              <input id="fileInput" type="file" accept="image/*" />
+              <div class="upload-icon">⇪</div>
+              <div class="upload-text">
+                <strong>Choose a cacao image</strong>
+                <small>PNG, JPG, WEBP supported</small>
+              </div>
+            </label>
+
+            <button type="submit" class="primary-btn" id="submit-btn">
+              Analyze image
+            </button>
+          </form>
+        </section>
+
+        <section class="results-panel">
+          <div class="image-stage">
+            <img id="preview-image" alt="Uploaded cacao pod preview" />
+            <div id="empty-state" class="empty-state">
+              <span>No image selected yet</span>
+            </div>
+          </div>
+
+          <div class="analysis-card">
+            <div class="card-header">
+              <span>Diagnosis</span>
+              <span id="confidence-badge" class="confidence-badge">—</span>
+            </div>
+
+            <h2 id="prediction-name">Awaiting analysis</h2>
+            <p id="disease-label" class="disease-label">Upload an image to begin.</p>
+
+            <div class="stats-grid">
+              <div class="stat-box">
+                <span>Prediction</span>
+                <strong id="prediction-value">—</strong>
+              </div>
+              <div class="stat-box">
+                <span>Confidence</span>
+                <strong id="confidence-value">—</strong>
+              </div>
+            </div>
+
+            <div class="probability-section">
+              <h3>Class probabilities</h3>
+              <div id="probability-list" class="probability-list">
+                <div class="probability-row placeholder-row">
+                  <span>Black Pod Rot</span>
+                  <div class="bar-track"><i style="width: 0%"></i></div>
+                  <strong>0%</strong>
+                </div>
+                <div class="probability-row placeholder-row">
+                  <span>Healthy</span>
+                  <div class="bar-track"><i style="width: 0%"></i></div>
+                  <strong>0%</strong>
+                </div>
+                <div class="probability-row placeholder-row">
+                  <span>Pod Borer</span>
+                  <div class="bar-track"><i style="width: 0%"></i></div>
+                  <strong>0%</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script>
+      const form = document.getElementById('predict-form');
+      const fileInput = document.getElementById('fileInput');
+      const previewImage = document.getElementById('preview-image');
+      const emptyState = document.getElementById('empty-state');
+      const submitBtn = document.getElementById('submit-btn');
+      const predictionName = document.getElementById('prediction-name');
+      const diseaseLabel = document.getElementById('disease-label');
+      const predictionValue = document.getElementById('prediction-value');
+      const confidenceValue = document.getElementById('confidence-value');
+      const confidenceBadge = document.getElementById('confidence-badge');
+      const probabilityList = document.getElementById('probability-list');
+
+      fileInput.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          previewImage.src = e.target.result;
+          previewImage.style.display = 'block';
+          emptyState.style.display = 'none';
+        };
+        reader.readAsDataURL(file);
+      });
+
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+
+        const file = fileInput.files[0];
+        if (!file) {
+          alert('Please select an image first.');
+          return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Analyzing...';
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+          const response = await fetch('/predict', {
+            method: 'POST',
+            body: formData,
+          });
+
+          const data = await response.json();
+
+          if (!response.ok) {
+            throw new Error(data.detail || 'Unable to process image');
+          }
+
+          const { disease, prediction, confidence, probabilities } = data;
+          const formattedConfidence = `${(confidence * 100).toFixed(1)}%`;
+
+          predictionName.textContent = disease;
+          diseaseLabel.textContent = 'AI plant health assessment';
+          predictionValue.textContent = disease;
+          confidenceValue.textContent = formattedConfidence;
+          confidenceBadge.textContent = formattedConfidence;
+
+          const labelMap = {
+            black_pod_rot: 'Black Pod Rot',
+            healthy: 'Healthy',
+            pod_borer: 'Pod Borer',
+          };
+
+          const rows = Object.entries(probabilities)
+            .map(([key, value]) => {
+              const percentage = Number(value) * 100;
+              return `
+                <div class="probability-row">
+                  <span>${labelMap[key] || key}</span>
+                  <div class="bar-track"><i style="width: ${percentage}%"></i></div>
+                  <strong>${percentage.toFixed(1)}%</strong>
+                </div>
+              `;
+            })
+            .join('');
+
+          probabilityList.innerHTML = rows;
+        } catch (error) {
+          predictionName.textContent = 'Analysis failed';
+          diseaseLabel.textContent = error.message;
+          predictionValue.textContent = '—';
+          confidenceValue.textContent = '—';
+          confidenceBadge.textContent = '—';
+          probabilityList.innerHTML = `
+            <div class="probability-row error-row">
+              <span>${error.message}</span>
+            </div>
+          `;
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Analyze image';
+        }
+      });
+    </script>
+  </body>
+</html>
